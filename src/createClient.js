@@ -13,8 +13,20 @@ async function connect(client) {
     client.connect()
 
     client.once('resource_packs_info', () => {
-        client.write('resource_pack_client_response', { response_status: 'completed', resourcepackids: [] })
-        client.write('request_chunk_radius', { chunk_radius: 16, max_radius: 8 })
+        const completeResourcePackHandshake = () => {
+            client.write('resource_pack_client_response', {
+                response_status: 'completed',
+                response_status_name: 'resourcepackstackfinished',
+                resourcepackids: []
+            })
+        }
+
+        client.once('resource_pack_stack', () => {
+            completeResourcePackHandshake()
+            client.write('request_chunk_radius', { chunk_radius: 16, max_radius: 8 })
+        })
+
+        completeResourcePackHandshake()
     })
 }
 

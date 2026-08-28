@@ -131,10 +131,6 @@ class RelayPlayer extends Player {
 }
 
 class Relay extends Server {
-    /**
-     * Creates a new non-transparent proxy connection to a destination server
-     * @param {Options} options
-     */
     constructor(options) {
         super(options)
         this.RelayPlayer = options.relayPlayer || RelayPlayer
@@ -143,7 +139,6 @@ class Relay extends Server {
         this.conLog = console.log
         this.enableChunkCaching = options.enableChunkCaching
     }
-
     async openUpstreamConnection(ds, clientAddr) {
         const options = {
             authTitle: this.options.authTitle,
@@ -172,9 +167,7 @@ class Relay extends Server {
                 ...this.options.skinData
             }
         }
-
         const client = new Client(options)
-
         await client.init();
         client.connect()
 
@@ -182,25 +175,20 @@ class Relay extends Server {
             client.write('client_cache_status', { enabled: false })
 
             ds.upstream = client
-
             console.log('Connected to upstream server')
-
             const data = { name: 'resource_packs_info', params }
             ds.emit('clientbound', data, { canceled: false })
             ds.write('resource_packs_info', params)
-
             const len = ds.pendingUpstreamPackets.length
             if (len > 0) {
                 for (let i = 0; i < len; i++) {
                     const pending = ds.pendingUpstreamPackets[i]
                     ds.forwardToUpstream(pending.data, pending.packet, pending.modified)
                 }
-
                 ds.pendingUpstreamPackets = [];
             }
 
             client.readPacket = (packet) => ds.readUpstream(packet)
-
             this.emit('join', ds, client)
         })
 
@@ -208,17 +196,14 @@ class Relay extends Server {
             console.log(err, "upstream client")
 
             ds.disconnect('Server error: ' + err.message)
-
             this.upstreams.delete(clientAddr.hash)
         })
 
         client.on('close', (reason) => {
-            const cascading = ds.status === undefined || ds.status === 0 /* Disconnected */
+            const cascading = ds.status === undefined || ds.status === 0 
 
             console.log('>>> upstream Client emitted CLOSE for', clientAddr, '— reason:', reason, cascading ? '(cascading from local close — ds.disconnect will no-op)' : '(upstream-initiated)')
-
             ds.disconnect(reason ? `Backend server closed connection (${reason})` : 'Backend server closed connection')
-
             this.upstreams.delete(clientAddr.hash)
         })
 
@@ -229,7 +214,6 @@ class Relay extends Server {
         const up = this.upstreams.get(clientAddr.hash)
         if (!up) throw Error(`unable to close non-open connection ${clientAddr.hash}`)
         up.close()
-
         this.upstreams.delete(clientAddr.hash)
     }
 
@@ -240,26 +224,21 @@ class Relay extends Server {
         this.clients[conn.address] = player
 
         this.emit('connect', player)
-
         player.on('login', () => {
             console.log('Received login from', conn.address)
             this.openUpstreamConnection(player, conn.address)
         })
-
         player.on('close', (reason) => {
             console.log('player disconnected', conn.address, reason)
             this.clientCount--
             delete this.clients[conn.address]
         })
     }
-
     close(...a) {
         for (const [, v] of this.upstreams) {
             v.close(...a)
         }
-
         super.close(...a)
     }
 }
-
 module.exports = { Relay }

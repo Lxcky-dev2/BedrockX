@@ -12,12 +12,13 @@ const PORT = 7551
 const BROADCAST_ADDRESS = '255.255.255.255'
 
 class Client extends EventEmitter {
-  constructor(networkId, broadcastAddress = BROADCAST_ADDRESS, token) {
+  constructor(networkId, broadcastAddress = BROADCAST_ADDRESS, token, identityPrivateKey) {
     super()
 
     this.serverNetworkId = networkId
     this.broadcastAddress = broadcastAddress
     this.token = token
+    this.identityPrivateKey = identityPrivateKey
     this.networkId = getRandomUint64()
     this.connectionId = getRandomUint64()
     this.socket = dgram.createSocket('udp4')
@@ -86,7 +87,9 @@ class Client extends EventEmitter {
   }
 
   async createAssertion(fingerprint, token) {
-    const { privateKey: pkcs8Key } = crypto.generateKeyPairSync("ec", { namedCurve: "P-384", privateKeyEncoding: { type: "pkcs8", format: "pem" } });
+    const pkcs8Key = this.identityPrivateKey
+      ? this.identityPrivateKey.export({ type: "pkcs8", format: "pem" })
+      : crypto.generateKeyPairSync("ec", { namedCurve: "P-384", privateKeyEncoding: { type: "pkcs8", format: "pem" } }).privateKey
 
     const payload = JSON.stringify({ fingerprint: [{ algorithm: "sha-256", digest: fingerprint }] });
 
@@ -208,7 +211,21 @@ class Client extends EventEmitter {
         
         this.handleCandidate(signal)
         break
+      case SignalType.ConnectError:
+        this.handleConnectError(signal)
+        break
     }
+  }
+
+  handleConnectError(signal) {
+    console.error(`NetherNet connect error (code ${signal.data}) for connection ${signal.connectionId}`)
+
+    if (this.rtcConnection) {
+      this.rtcConnection.close()
+      this.rtcConnection = null
+    }
+
+    this.emit('disconnect', signal.connectionId, `connect_error:${signal.data}`)
   }
 
   sendDiscoveryRequest() {

@@ -73,16 +73,19 @@ class NethernetJSONRPC extends EventEmitter {
     }
 
     async reconnectWithBackoff() {
-        if (this.retryCount >= MAX_RETRIES) {
-            this.emit("error", new Error("Signal reconnection failed after max retries"));
-            return;
-        }
+        if (this.destroyed) return
 
-        await new Promise((r) => setTimeout(r, 15000));
+        const delay = Math.min(15000 * Math.max(1, this.retryCount), 60000)
+        await new Promise((r) => setTimeout(r, delay));
+
+        if (this.destroyed) return
 
         try {
             await this.init();
-        } catch (e) { }
+        } catch (e) {
+            console.error("Signal reconnect attempt failed, will retry:", e)
+            this.reconnectWithBackoff().catch(() => {})
+        }
     }
 
     async init() {
@@ -131,7 +134,9 @@ class NethernetJSONRPC extends EventEmitter {
 
     onError(err) {
         console.error(err);
-        this.client.emit("error", `Signaling WebSocket error`)
+        if (this.listenerCount("error") > 0) {
+            this.emit("error", err instanceof Error ? err : new Error(String(err)))
+        }
     }
 
     async onClose(code, reason) {
@@ -142,17 +147,14 @@ class NethernetJSONRPC extends EventEmitter {
 
         if (this.destroyed) return
 
-        // 1006 closure
-        // 1011 error
-        // 4401 unauthorized
-        const retryable = [1000, 1006, 1011, 4401].includes(code) || code === 0
+        console.warn(`Signal closed: ${code} ${reason} - reconnecting...`)
 
-        if (retryable && this.retryCount < MAX_RETRIES) {
-            this.retryCount++
+        this.retryCount++
+        try {
             await this.destroy(true)
-        } else {
-            await this.destroy(false)
-            this.emit("error", new Error(`Signal closed: ${code} ${reason}`))
+        } catch (err) {
+            console.error("Error while reconnecting signaling socket:", err)
+            this.reconnectWithBackoff().catch(() => {})
         }
     }
 
@@ -253,7 +255,6 @@ class NethernetJSONRPC extends EventEmitter {
             if (signal.data.includes("tcp") || signal.data.includes("::1") || signal.data.includes("127.0.0.1")) return;
 
             this.candidates.push(signal)
-            // Don't write yet, just store for later, and then we will write them after connectrequest
             return
         }
 

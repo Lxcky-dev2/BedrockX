@@ -6,9 +6,9 @@ const cipher = require('./transforms/encryption')
 const ClientStatus = {
   Disconnected: 0,
   Connecting: 1,
-  Authenticating: 2, // Handshaking
-  Initializing: 3, // Authed, need to spawn
-  Initialized: 4 // play_status spawn sent by server, client responded with SetPlayerInit packet
+  Authenticating: 2,
+  Initializing: 3,
+  Initialized: 4
 }
 
 class Connection extends EventEmitter {
@@ -73,7 +73,6 @@ class Connection extends EventEmitter {
       }
   }
 
-  // These are callbacks called from encryption.js
   onEncryptedPacket = (buf) => {
     this.sendMCPE(this.batchHeader ? Buffer.concat([Buffer.from([this.batchHeader]), buf]) : buf)
   }
@@ -83,8 +82,8 @@ class Connection extends EventEmitter {
     for (let i = 0; i < packets.length; i++) this.readPacket(packets[i])
   }
 
-  handle(buffer) { // handle encapsulated
-    if (!this.batchHeader || buffer[0] === this.batchHeader) { // wrapper
+  handle(buffer) {
+    if (!this.batchHeader || buffer[0] === this.batchHeader) {
       if (this.encryptionEnabled) {
         this.decrypt(buffer.slice(1))
       } else {

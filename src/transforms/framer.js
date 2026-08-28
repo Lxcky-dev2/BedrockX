@@ -3,7 +3,6 @@ const zlib = require('zlib')
 
 class Framer {
   constructor(client) {
-    // Encoding
     this.packets = []
     this.updateCompressionSettings(client)
   }
@@ -17,7 +16,6 @@ class Framer {
     this.writeCompressor = Boolean(client.features?.compressorInHeader && client.compressionReady)
   }
 
-  // No compression in base class
   compress(buffer) {
     switch (this.compressor) {
       case 'deflate': return zlib.deflateRawSync(buffer, { level: this.compressionLevel })

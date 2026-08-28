@@ -18,41 +18,32 @@ class NethernetServerAdvertisement {
     const advertisement = new NethernetServerAdvertisement()
     let offset = 0
 
-    // version
     advertisement.version = buffer.readUInt8(offset++)
 
-    // motd
     const motdLength = buffer.readUInt8(offset++)
     advertisement.motd = buffer.toString('utf8', offset, offset + motdLength)
     offset += motdLength
 
-    // level name
     const levelNameLength = buffer.readUInt8(offset++)
     advertisement.levelName = buffer.toString('utf8', offset, offset + levelNameLength)
     offset += levelNameLength
 
-    // gamemode
     advertisement.gamemodeId = buffer.readUInt8(offset++)
 
-    // player count
     advertisement.playerCount = buffer.readInt32LE(offset)
     offset += 4
 
-    // max count
     advertisement.playersMax = buffer.readInt32LE(offset)
     offset += 4
 
-    // is editor
     if (offset < buffer.length) {
       advertisement.isEditorWorld = buffer.readUInt8(offset++) === 1
     }
 
-    // is hardcore
     if (offset < buffer.length) {
       advertisement.hardcore = buffer.readUInt8(offset++) === 1
     }
 
-    // unknown1 and unknown2
     if (offset < buffer.length) {
       advertisement.unknown1 = buffer.readUInt8(offset++)
     }
@@ -70,37 +61,28 @@ class NethernetServerAdvertisement {
 
     const buffers = []
 
-    // version
     buffers.push(Buffer.from([this.version]))
 
-    // motd
     buffers.push(Buffer.from([motdBuffer.length]))
     buffers.push(motdBuffer)
 
-    // level name
     buffers.push(Buffer.from([levelNameBuffer.length]))
     buffers.push(levelNameBuffer)
 
-    // gamemode
     buffers.push(Buffer.from([this.gamemodeId]))
 
-    // player count
     const playerCountBuffer = Buffer.alloc(4)
     playerCountBuffer.writeInt32LE(this.playerCount, 0)
     buffers.push(playerCountBuffer)
 
-    // max count
     const playersMaxBuffer = Buffer.alloc(4)
     playersMaxBuffer.writeInt32LE(this.playersMax, 0)
     buffers.push(playersMaxBuffer)
 
-    // is editor
     buffers.push(Buffer.from([this.isEditorWorld ? 1 : 0]))
 
-    // is hardcore
     buffers.push(Buffer.from([this.hardcore ? 1 : 0]))
 
-    // unknown1 and unknown2
     buffers.push(Buffer.from([this.unknown1]))
     buffers.push(Buffer.from([this.unknown2]))
 
@@ -119,9 +101,9 @@ class ServerAdvertisement {
   portV4 = undefined
   portV6 = undefined
 
-  constructor(obj, port, version = "1.26.30") {
+  constructor(obj, port, version = "1.26.40") {
     if (obj?.name) obj.motd = obj.name
-    this.protocol = 1001
+    this.protocol = 2168
     this.version = version
     this.portV4 = port
     this.portV6 = port

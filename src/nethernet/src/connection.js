@@ -1,4 +1,4 @@
-const MAX_MESSAGE_SIZE = 50000; // 262143 IS MAX MESSAGE SIZE EXACT, lower because of larger packets
+const MAX_MESSAGE_SIZE = 50000;
 
 const ensureBuffer = (data) => {
   if (Buffer.isBuffer(data)) return data
@@ -27,6 +27,10 @@ class Connection {
       this.reliable.binaryType = 'arraybuffer'
       this.reliable.onmessage = (event) => this.handleMessage(event.data)
       this.reliable.onopen = () => this.flushQueue()
+      this.reliable.onclose = () => {
+        this.sendQueue.length = 0
+        this.nethernet.emit('disconnect', this.address, 'reliable_channel_closed')
+      }
     }
 
     if (unreliable) {
@@ -62,7 +66,7 @@ class Connection {
       return 0
     }
 
-    if (this.reliable.readyState === 'closed' || this.reliable.readyState === 'closing') throw new Error('Reliable channel is not open')
+    if (this.reliable.readyState === 'closed' || this.reliable.readyState === 'closing') return 0
 
     return this.sendNow(payload)
   }

@@ -1,5 +1,5 @@
 const { ClientStatus, Connection } = require('./connection')
-const { createDeserializer, createSerializer } = require('./transforms/serializer')
+const { createDeserializer, createSerializer, PROTOCOL_VERSION, GAME_VERSION } = require('./transforms/serializer')
 const { NethernetClient } = require('./nethernet')
 const { RakClient } = require('./rak')
 const { authenticate } = require('./client/auth')
@@ -36,6 +36,12 @@ class Client extends Connection {
         this.deserializer = createDeserializer()
         this.features = { compressorInHeader: true }
 
+        if (this.options.protocolVersion != null && this.options.protocolVersion !== PROTOCOL_VERSION) {
+            console.warn(`[bedrockx] options.protocolVersion (${this.options.protocolVersion}) does not match the bundled schema's protocol (${PROTOCOL_VERSION}, game version ${GAME_VERSION}); overriding to ${PROTOCOL_VERSION} so encoded packets match what's declared to the server.`)
+        }
+        this.options.protocolVersion = PROTOCOL_VERSION
+        if (this.options.version == null) this.options.version = GAME_VERSION
+
         this.ecdhKeyPair = crypto.generateKeyPairSync('ec', { namedCurve: "secp384r1" })
         this.clientX509 = this.ecdhKeyPair.publicKey.export(der).toString('base64')
         this.privateKeyPEM = this.ecdhKeyPair.privateKey.export(pem)
@@ -45,7 +51,7 @@ class Client extends Connection {
         switch (this.options.transport) {
             case "NETHERNET":
             case "NETHERNET_JSONRPC":
-                this.connection = new NethernetClient({ networkId: this.options.networkId, token: this.token })
+                this.connection = new NethernetClient({ networkId: this.options.networkId, token: this.token, privateKey: this.ecdhKeyPair.privateKey })
 
                 this.batchHeader = null
                 this.disableEncryption = true
@@ -143,25 +149,25 @@ class Client extends Connection {
     }
 
     close(reason) {
-        if (this.status !== ClientStatus.Disconnected) this.emit('close', reason) // Emit close once
+        if (this.status === ClientStatus.Disconnected) return
+        this.emit('close', reason)
         this.batch = null;
         this.connection?.close()
         this.removeAllListeners()
         this.status = ClientStatus.Disconnected
         if (!this.options.transport.includes("NETHERNET")) return
-        if (this.nethernet.signalling) this.nethernet.signalling.destroy()
+        if (this.nethernet?.signalling) this.nethernet.signalling.destroy()
         this.nethernet = null
     }
 
     readPacket(packet) {
         try {
-            var des = this.deserializer.parsePacketBuffer(packet) // eslint-disable-line
+            var des = this.deserializer.parsePacketBuffer(packet)
         } catch (e) {
             this.emit('error', e)
             return
         }
 
-        // Abstract some boilerplate before sending to listeners
         switch (des.data.name) {
             case 'network_settings':
                 this.compressionAlgorithm = des.data.params.compression_algorithm || 'deflate'
@@ -182,7 +188,7 @@ class Client extends Connection {
                 this.write('client_to_server_handshake', {})
                 this.status = ClientStatus.Initializing
                 break
-            case 'disconnect': // Client kicked
+            case 'disconnect':
                 this.emit('kick', des.data.params)
                 this.close()
                 break
