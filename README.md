@@ -6,4 +6,5 @@ There is a example provided. You can read the source code to learn how it works.
 
 Parts of NETHERNET Support is based off of Atomic Protocol (Original Repository now deleted) by [Serial-V](https://github.com/Serial-V)
 
-Let me know of any issues you find
+#Supported Version 
+26.44 (latest)
