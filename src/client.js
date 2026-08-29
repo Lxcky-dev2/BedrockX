@@ -36,6 +36,11 @@ class Client extends Connection {
         this.deserializer = createDeserializer()
         this.features = { compressorInHeader: true }
 
+        // There is exactly one bundled schema (see transforms/serializer.js), so the
+        // protocol/game version we declare to the server MUST match what we actually
+        // encode with, or packets get decoded with the wrong shape and the server
+        // kicks us as malformed (e.g. packet id 144, player_auth_input). Warn and
+        // override rather than silently trusting a possibly-stale config value.
         if (this.options.protocolVersion != null && this.options.protocolVersion !== PROTOCOL_VERSION) {
             console.warn(`[bedrockx] options.protocolVersion (${this.options.protocolVersion}) does not match the bundled schema's protocol (${PROTOCOL_VERSION}, game version ${GAME_VERSION}); overriding to ${PROTOCOL_VERSION} so encoded packets match what's declared to the server.`)
         }
@@ -149,8 +154,8 @@ class Client extends Connection {
     }
 
     close(reason) {
-        if (this.status === ClientStatus.Disconnected) return
-        this.emit('close', reason)
+        if (this.status === ClientStatus.Disconnected) return // Already closed, ignore duplicate close (e.g. a queued disconnect packet arriving after the connection already dropped)
+        this.emit('close', reason) // Emit close once
         this.batch = null;
         this.connection?.close()
         this.removeAllListeners()
@@ -162,12 +167,13 @@ class Client extends Connection {
 
     readPacket(packet) {
         try {
-            var des = this.deserializer.parsePacketBuffer(packet)
+            var des = this.deserializer.parsePacketBuffer(packet) // eslint-disable-line
         } catch (e) {
             this.emit('error', e)
             return
         }
 
+        // Abstract some boilerplate before sending to listeners
         switch (des.data.name) {
             case 'network_settings':
                 this.compressionAlgorithm = des.data.params.compression_algorithm || 'deflate'
@@ -188,7 +194,7 @@ class Client extends Connection {
                 this.write('client_to_server_handshake', {})
                 this.status = ClientStatus.Initializing
                 break
-            case 'disconnect':
+            case 'disconnect': // Client kicked
                 this.emit('kick', des.data.params)
                 this.close()
                 break

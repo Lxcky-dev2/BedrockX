@@ -22,12 +22,13 @@ class Player extends Connection {
         this.batchHeader = this.server.batchHeader
         this.disableEncryption = this.server.disableEncryption
 
+        // Compression is server-wide
         this.compressionAlgorithm = this.server.compressionAlgorithm
         this.compressionLevel = this.server.compressionLevel
         this.compressionThreshold = this.server.compressionThreshold
         this.compressionHeader = this.server.compressionHeader
 
-        this._sentNetworkSettings = true
+        this._sentNetworkSettings = true // 1.19.30+
 
         this.ecdhKeyPair = crypto.generateKeyPairSync('ec', { namedCurve: curve })
         this.publicKeyDER = this.ecdhKeyPair.publicKey.export(der)
@@ -99,18 +100,28 @@ class Player extends Connection {
         this.skinData = skinData
         this.version = clientVer
 
-        this.emit('login', { user: this.userData })
+        this.emit('login', { user: this.userData }) // emit events for user
     }
 
+    /**
+     * Disconnects a client before it has joined
+     * @param {string} playStatus
+     */
     sendDisconnectStatus(playStatus) {
         if (this.status === ClientStatus.Disconnected) return
         this.write('play_status', { status: playStatus })
         this.close('kick')
     }
+
+    /**
+     * Disconnects a client
+     */
     disconnect(reason = 'Server closed', hide = false) {
         if (this.status === ClientStatus.Disconnected || this._disconnecting) return
+
         this._disconnecting = true
         console.log('>>> disconnect() ENTRY for', this.connection?.address, '— reason:', reason, '— status:', this.status, new Error('disconnect stack').stack)
+
         try {
             this.write('disconnect', {
                 hide_disconnect_screen: hide,
@@ -120,39 +131,49 @@ class Player extends Connection {
         } catch (e) {
             console.log('disconnect: write("disconnect") threw:', e.message)
         }
+
         setTimeout(() => {
             console.log('>>> disconnect() setTimeout firing close("kick") for', this.connection?.address)
             this.close('kick')
         }, 100)
     }
+
     close(reason) {
         console.log('>>> Player.close() ENTRY for', this.connection?.address, '— reason:', reason, '— status:', this.status, new Error('Player.close stack').stack)
         if (this.status !== ClientStatus.Disconnected) {
-            this.emit('close')
+            this.emit('close') // Emit close once
             if (!reason) console.log('Client closed connection', this.connection?.address)
         }
         this.connection?.close()
         this.removeAllListeners()
         this.status = ClientStatus.Disconnected
     }
+
+    // After sending Server to Client Handshake, this handles the client's
+    // Client to Server handshake response. This indicates successful encryption
     onHandshake() {
+        // https://wiki.vg/Bedrock_Protocol#Play_Status
         this.write('play_status', { status: 'login_success' })
         this.status = ClientStatus.Initializing
         this.emit('join')
     }
+
     readPacket(packet) {
         try {
-            var des = this.server.deserializer.parsePacketBuffer(packet)
+            var des = this.server.deserializer.parsePacketBuffer(packet) // eslint-disable-line
         } catch (e) {
             this.disconnect('Server error')
             console.log('Dropping packet from', this.connection.address, e)
             return
         }
+
         switch (des.data.name) {
+            // This is the first packet on 1.19.30 & above
             case 'request_network_settings':
                 this.sendNetworkSettings()
                 this.compressionLevel = this.server.compressionLevel
                 return
+            // Below 1.19.30, this is the first packet.
             case 'login':
                 this.onLogin(des)
                 if (!this._sentNetworkSettings) this.sendNetworkSettings()
@@ -165,7 +186,9 @@ class Player extends Connection {
                 this.emit('spawn')
                 break
         }
+
         this.emit(des.data.name, des.data.params)
     }
 }
+
 module.exports = { Player }

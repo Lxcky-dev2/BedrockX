@@ -39,6 +39,7 @@ class Server extends EventEmitter {
     this.serializer = createSerializer()
     this.deserializer = createDeserializer()
     this.advertisement.playersMax = options.maxPlayers ?? 3
+    /** @type {Object<string, Player>} */
     this.clients = {}
     this.clientCount = 0
     this.conLog = debug

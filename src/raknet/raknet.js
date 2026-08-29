@@ -17,6 +17,7 @@ class Client extends EventEmitter {
     return this.client.close()
   }
 
+  // Handle inbound packets and emit events
   startListening() {
     this.client.listen((buffers, address, guid) => {
       for (let i = 0; i < buffers.length; i++) {
@@ -26,6 +27,7 @@ class Client extends EventEmitter {
 
         try {
           if (id < MessageID.ID_USER_PACKET_ENUM) {
+            // Internal RakNet messages: we handle & emit
             switch (id) {
               case MessageID.ID_UNCONNECTED_PONG:
                 if (buf.byteLength > 5) {
@@ -67,10 +69,12 @@ class Client extends EventEmitter {
   }
 
   send(message, priority, reliability, orderingChannel = 0, broadcast = false) {
+    // When you Buffer.from/allocUnsafe, it may put your data into a global buffer, we need it in its own buffer
     if (message instanceof Buffer && message.buffer.byteLength !== message.byteLength) message = new Uint8Array(message)
 
     const ret = this.client.send(message instanceof ArrayBuffer ? message : message.buffer, priority, reliability, orderingChannel, broadcast)
 
+    // ret <= 0 is -(ConnectionState) — peer is mid-teardown; drop instead of crashing the relay.
     return ret
   }
 }
@@ -82,7 +86,7 @@ function ServerClient(server, address, guid) {
   this.send = (...args) => server.send(hostname, port, ...args)
   this.close = (silent) => server.kick(guid, silent)
 
-  this.neuter = () => {
+  this.neuter = () => { // Client is disconnected, no-op to block sending
     this.send = () => { }
   }
 }
@@ -107,7 +111,7 @@ class Server extends EventEmitter {
         const buf = Buffer.from(buffer)
         try {
           const id = buf[0]
-          if (id < MessageID.ID_USER_PACKET_ENUM) {
+          if (id < MessageID.ID_USER_PACKET_ENUM) { // Internal RakNet messages: we handle & emit
             if (id === MessageID.ID_NEW_INCOMING_CONNECTION) {
               const client = new ServerClient(this, address, guid)
               this.connections.set(guid, client)
@@ -120,10 +124,10 @@ class Server extends EventEmitter {
               }
               this.connections.delete(guid)
             }
-          } else {
+          } else { // User messages
             this.emit('encapsulated', { buffer: buf, address, guid })
           }
-        } catch (e) {
+        } catch (e) { // If we don't handle this the program will segfault
           console.log(e, buf)
           this.emit('error', e, buf)
         }
@@ -134,6 +138,10 @@ class Server extends EventEmitter {
   send(sendAddr, sendPort, message, priority, reliability, orderingChannel = 0, broadcast = false) {
     if (message instanceof Buffer && message.buffer.byteLength !== message.byteLength) message = new Uint8Array(message)
     const ret = this.server.send(sendAddr, parseInt(sendPort), message instanceof ArrayBuffer ? message : message.buffer, priority, reliability, orderingChannel, broadcast)
+    // Native binding returns -(ConnectionState) when the peer isn't IS_CONNECTED:
+    //   0=IS_PENDING, -1=IS_CONNECTING, -3=IS_DISCONNECTING, -4=IS_SILENTLY_DISCONNECTING,
+    //   -5=IS_DISCONNECTED, -6=IS_NOT_CONNECTED. Drop the packet and neuter the matching
+    // ServerClient — throwing here aborts the relay mid-cipher and desynchronizes the GCM counter.
     if (ret <= 0) {
       const targetAddress = `${sendAddr}/${sendPort}`
       for (const [, conn] of this.connections) {

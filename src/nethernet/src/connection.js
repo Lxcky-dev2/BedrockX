@@ -1,4 +1,4 @@
-const MAX_MESSAGE_SIZE = 50000;
+const MAX_MESSAGE_SIZE = 50000; // 262143 IS MAX MESSAGE SIZE EXACT, lower because of larger packets
 
 const ensureBuffer = (data) => {
   if (Buffer.isBuffer(data)) return data
@@ -66,6 +66,12 @@ class Connection {
       return 0
     }
 
+    // The connection is already gone (closed by the remote side, a failed
+    // ICE/DTLS negotiation, etc). This is an expected end state once
+    // disconnected, not a bug the caller should have to try/catch on every
+    // send — drop the payload and rely on the 'disconnect' event (fired by
+    // onclose above, and by onconnectionstatechange) to tell the consumer
+    // the connection is dead so it can stop calling send() at all.
     if (this.reliable.readyState === 'closed' || this.reliable.readyState === 'closing') return 0
 
     return this.sendNow(payload)

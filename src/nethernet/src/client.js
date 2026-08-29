@@ -87,6 +87,11 @@ class Client extends EventEmitter {
   }
 
   async createAssertion(fingerprint, token) {
+    // The signing key MUST correspond to the public key that was sent to the
+    // franchise auth service when this.token was issued (its 'cpk' claim is
+    // bound to that public key). Signing with any other key - such as a
+    // freshly generated, unrelated key pair - causes the server to reject the
+    // identity assertion with ConnectError code 37 (identity verification failed).
     const pkcs8Key = this.identityPrivateKey
       ? this.identityPrivateKey.export({ type: "pkcs8", format: "pem" })
       : crypto.generateKeyPairSync("ec", { namedCurve: "P-384", privateKeyEncoding: { type: "pkcs8", format: "pem" } }).privateKey
@@ -220,6 +225,8 @@ class Client extends EventEmitter {
   handleConnectError(signal) {
     console.error(`NetherNet connect error (code ${signal.data}) for connection ${signal.connectionId}`)
 
+    // Nothing was listening for this before, so failed connections just hung
+    // instead of ever resolving/rejecting or notifying the consumer.
     if (this.rtcConnection) {
       this.rtcConnection.close()
       this.rtcConnection = null

@@ -131,6 +131,9 @@ class NethernetSignal extends EventEmitter {
 
         if (this.destroyed) return
 
+        // 1006 closure
+        // 1011 error
+        // 4401 unauthorized
         const retryable = [1006, 1011, 4401].includes(code) || code === 0
 
         if (retryable && this.retryCount < MAX_RETRIES) {

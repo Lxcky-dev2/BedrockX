@@ -1,5 +1,18 @@
 'use strict'
 
+// Apex MCBE — safe error emitter.
+//
+// Node's EventEmitter THROWS (ERR_UNHANDLED_ERROR -> "Unhandled error.")
+// whenever an 'error' event is emitted while no 'error' listener is attached.
+// This happens in two common situations in this bot:
+//   1. A connection/auth step rejects AFTER the client was closed
+//      (client.close() calls removeAllListeners(), so the listener is gone).
+//   2. An 'error' is emitted before the consumer had a chance to attach a
+//      listener (a race between createClient() and registerListeners()).
+//
+// Either case crashed the whole process. safeEmitError() never throws: it
+// normalises the value into a real Error and only emits when a listener
+// exists, otherwise it just logs a recoverable warning.
 function toError(err) {
   if (err instanceof Error) return err
   const error = typeof err === 'string'
@@ -35,6 +48,7 @@ function safeEmitError(emitter, err) {
       console.warn('[Apex:protocol:recoverable] suppressed error with no listener:', error.message)
     }
   } catch (e) {
+    // Last-resort guard so emitting an error can never take the bot down.
     console.warn('[Apex:protocol:recoverable] failed to emit error:', (e && e.message) || e)
   }
 }
